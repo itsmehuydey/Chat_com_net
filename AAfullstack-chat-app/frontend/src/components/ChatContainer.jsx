@@ -33,17 +33,37 @@ const ChatContainer = () => {
 
     const renderFile = (file, fileName) => {
         if (!file) return null;
-        const isImage = file.match(/\.(jpeg|jpg|png)$/i);
+
+        const fileExtension = fileName?.split(".").pop()?.toLowerCase();
+        const isImage = ["jpg", "jpeg", "png"].includes(fileExtension);
+
         if (isImage) {
+            const imageUrl = file.replace('/auto/upload/', '/image/upload/'); // Đảm bảo đúng định dạng URL của Cloudinary
             return (
-                <img
-                    src={file}
-                    alt="Attachment"
-                    className="sm:max-w-[200px] rounded-md mb-2"
-                    onError={(e) => (e.target.style.display = "none")}
-                />
+                <div className="relative">
+                    <img
+                        src={imageUrl}
+                        alt="Attachment"
+                        className="sm:max-w-[200px] rounded-md mb-2"
+                        onError={(e) => {
+                            e.target.style.display = "none";
+                            e.target.nextSibling.style.display = "block";
+                        }}
+                        onLoad={(e) => {
+                            e.target.style.display = "block";
+                            e.target.nextSibling.style.display = "none";
+                        }}
+                    />
+                    <p
+                        className="text-sm text-red-500 hidden"
+                        style={{ display: "none" }}
+                    >
+                        Không thể tải ảnh
+                    </p>
+                </div>
             );
         }
+
         return (
             <a
                 href={file}
@@ -72,11 +92,11 @@ const ChatContainer = () => {
         <div className="flex-1 flex flex-col overflow-auto">
             <ChatHeader />
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.map((message) => (
+                {messages.map((message, index) => (
                     <div
-                        key={message._id}
+                        key={message._id || index}
                         className={`chat ${message.senderId === authUser._id ? "chat-end" : "chat-start"}`}
-                        ref={messageEndRef}
+                        ref={index === messages.length - 1 ? messageEndRef : null}
                     >
                         <div className="chat-image avatar">
                             <div className="size-10 rounded-full border">
@@ -106,4 +126,5 @@ const ChatContainer = () => {
         </div>
     );
 };
+
 export default ChatContainer;
