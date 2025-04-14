@@ -9,6 +9,7 @@ export const useChatStore = create((set, get) => ({
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
+  peers: [], // Thêm state để lưu danh sách peer
 
   getUsers: async () => {
     set({ isUsersLoading: true });
@@ -30,7 +31,7 @@ export const useChatStore = create((set, get) => ({
         if (message.file) {
           return {
             ...message,
-            file: message.file.replace('/auto/upload/', '/image/upload/'), // Điều chỉnh URL khi lấy tin nhắn
+            file: message.file.replace('/auto/upload/', '/image/upload/'),
           };
         }
         return message;
@@ -88,4 +89,15 @@ export const useChatStore = create((set, get) => ({
   },
 
   setSelectedUser: (selectedUser) => set({ selectedUser }),
+
+  getPeersFromTracker: async (torrentFilePath) => {
+    try {
+      const res = await axiosInstance.post("/messages/peers", { torrentFilePath });
+      set({ peers: res.data });
+      return res.data; // Trả về danh sách peer dạng [{ ip, port }, ...]
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to fetch peers");
+      throw error;
+    }
+  },
 }));
