@@ -1,9 +1,20 @@
+// File: src/controllers/message.controller.js
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
+import Group from "../models/group.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
 import fetch from "node-fetch";
 import { initializeTrackerProtocol } from "../lib/tracker.js";
+import { logMessage } from "../lib/logger.js";
+
+const getHost = (req) => {
+  return (
+      req.headers['x-host'] ||
+      process.env.SERVER_HOST ||
+      (req.hostname === 'localhost' ? 'centralized' : 'channel')
+  );
+};
 
 export const getUsersForSidebar = async (req, res) => {
   try {
@@ -62,6 +73,7 @@ export const sendMessage = async (req, res) => {
     const { text } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
+    const host = getHost(req);
 
     let fileUrl;
     let fileName;
@@ -88,8 +100,6 @@ export const sendMessage = async (req, res) => {
         doc: "application/msword",
         docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       }[fileExtension] || "application/octet-stream";
-    } else {
-      console.log("No file received in request");
     }
 
     const newMessage = new Message({
@@ -101,7 +111,18 @@ export const sendMessage = async (req, res) => {
     });
 
     await newMessage.save();
-    console.log("New message saved:", newMessage);
+
+    logMessage(
+        {
+          type: 'message',
+          senderId,
+          receiverId,
+          text,
+          file: fileUrl || null,
+          fileName: fileName || null,
+        },
+        host
+    );
 
     const messageWithMimeType = {
       ...newMessage._doc,
@@ -121,13 +142,214 @@ export const sendMessage = async (req, res) => {
   }
 };
 
+export const createGroup = async (req, res) => {
+  try {
+    const { name, memberIds } = req.body;
+    const creatorId = req.user._id;
+    const host = getHost(req);
+
+    if (!name || !memberIds || !Array.isArray(memberIds)) {
+      return res.status(400).json({ error: "Tên nhóm và danh sách thành viên là bắt buộc" });
+    }
+
+    if (!memberIds.includes(creatorId.toString())) {
+      memberIds.push(creatorId);
+    }
+
+    const users = await User.find({ _id: { $in: memberIds } });
+    if (users.length !== memberIds.length) {
+      return res.status(400).json({ error: "Một số thành viên không tồn tại" });
+    }
+
+    const newGroup = new Group({
+      name,
+      members: memberIds,
+      creator: creatorId,
+    });
+
+    await newGroup.save();
+
+    logMessage(
+        {
+          type: 'group_created',
+          creatorId,
+          groupId: newGroup._id,
+          name,
+          members: memberIds,
+        },
+        host
+    );
+
+    const memberSocketIds = memberIds
+        .map((id) => getReceiverSocketId(id))
+        .filter((id) => id);
+    memberSocketIds.forEach((socketId) => {
+      io.to(socketId).emit("groupCreated", {
+        groupId: newGroup._id,
+        name: newGroup.name,
+        members: newGroup.members,
+      });
+    });
+
+    res.status(201).json({
+      groupId: newGroup._id,
+      name: newGroup.name,
+      members: newGroup.members,
+    });
+  } catch (error) {
+    console.log("Error in createGroup controller: ", error.message);
+    res.status(500).json({ error: "Không thể tạo nhóm: " + error.message });
+  }
+};
+
+export const sendGroupMessage = async (req, res) => {
+  try {
+    const { text } = req.body;
+    const { id: groupId } = req.params;
+    const senderId = req.user._id;
+    const host = getHost(req);
+
+    const group = await Group.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ error: "Nhóm không tồn tại" });
+    }
+
+    if (!group.members.includes(senderId)) {
+      return res.status(403).json({ error: "Bạn không phải thành viên của nhóm" });
+    }
+
+    let fileUrl;
+    let fileName;
+    let mimeType;
+    if (req.file) {
+      const base64File = req.file.buffer.toString("base64");
+      const dataUri = `data:${req.file.mimetype};base64,${base64File}`;
+
+      const fileExtension = req.file.originalname.split(".").pop().toLowerCase();
+      const resourceType = ["pdf", "doc", "docx"].includes(fileExtension) ? "raw" : "image";
+
+      const uploadResponse = await cloudinary.uploader.upload(dataUri, {
+        resource_type: resourceType,
+        access_mode: "public",
+      });
+      fileUrl = uploadResponse.secure_url.split('?')[0];
+      fileName = req.file.originalname;
+
+      mimeType = {
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        pdf: "application/pdf",
+        doc: "application/msword",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      }[fileExtension] || "application/octet-stream";
+    }
+
+    const newMessage = new Message({
+      senderId,
+      groupId,
+      text,
+      file: fileUrl || null,
+      fileName: fileName || null,
+    });
+
+    await newMessage.save();
+
+    logMessage(
+        {
+          type: 'group_message',
+          senderId,
+          groupId,
+          text,
+          file: fileUrl || null,
+          fileName: fileName || null,
+        },
+        host
+    );
+
+    const messageWithMimeType = {
+      ...newMessage._doc,
+      file: fileUrl || null,
+      mimeType,
+    };
+
+    const memberSocketIds = group.members
+        .map((id) => getReceiverSocketId(id.toString()))
+        .filter((id) => id);
+    memberSocketIds.forEach((socketId) => {
+      io.to(socketId).emit("newGroupMessage", messageWithMimeType);
+    });
+
+    res.status(201).json(messageWithMimeType);
+  } catch (error) {
+    console.log("Error in sendGroupMessage controller: ", error.message);
+    res.status(500).json({ error: "Không thể gửi tin nhắn nhóm: " + error.message });
+  }
+};
+
+export const getUserGroups = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const groups = await Group.find({ members: userId }).populate("members", "fullName email");
+    res.status(200).json(groups);
+  } catch (error) {
+    console.log("Error in getUserGroups controller: ", error.message);
+    res.status(500).json({ error: "Không thể lấy danh sách nhóm: " + error.message });
+  }
+};
+
+export const getGroupMessages = async (req, res) => {
+  try {
+    const { id: groupId } = req.params;
+    const userId = req.user._id;
+
+    const group = await Group.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ error: "Nhóm không tồn tại" });
+    }
+
+    if (!group.members.includes(userId)) {
+      return res.status(403).json({ error: "Bạn không phải thành viên của nhóm" });
+    }
+
+    const messages = await Message.find({ groupId }).populate("senderId", "fullName");
+
+    const messagesWithCorrectUrls = messages.map((message) => {
+      if (message.file && message.fileName) {
+        const fileExtension = message.fileName.split(".").pop().toLowerCase();
+        const mimeType = {
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          png: "image/png",
+          pdf: "application/pdf",
+          doc: "application/msword",
+          docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }[fileExtension] || "application/octet-stream";
+
+        return {
+          ...message._doc,
+          file: message.file.split('?')[0],
+          fileName: message.fileName,
+          mimeType,
+        };
+      }
+      return message;
+    });
+
+    res.status(200).json(messagesWithCorrectUrls);
+  } catch (error) {
+    console.log("Error in getGroupMessages controller: ", error.message);
+    res.status(500).json({ error: "Không thể lấy tin nhắn nhóm: " + error.message });
+  }
+};
+
 export const broadcastLivestream = async (req, res) => {
   try {
     const senderId = req.user._id;
     const { streamId } = req.body;
+    const host = getHost(req);
 
     const users = await User.find({ _id: { $ne: senderId } }).select("_id");
-    const streamLink = `http://localhost:5173/livestream/${streamId}?userId=${senderId}`;
 
     const messagePromises = users.map(async (user) => {
       const streamLink = `http://localhost:5173/livestream/${streamId}?userId=${user._id}`;
@@ -137,7 +359,17 @@ export const broadcastLivestream = async (req, res) => {
         text: `I started a livestream! Join here: ${streamLink}`,
       });
       await newMessage.save();
-      console.log("New message saved:", newMessage);
+
+      logMessage(
+          {
+            type: 'livestream_broadcast',
+            senderId,
+            receiverId: user._id,
+            streamId,
+            streamLink,
+          },
+          host
+      );
 
       const receiverSocketId = getReceiverSocketId(user._id);
       if (receiverSocketId) {
@@ -160,6 +392,7 @@ export const endLivestream = async (req, res) => {
   try {
     const senderId = req.user._id;
     const { streamId } = req.body;
+    const host = getHost(req);
 
     const users = await User.find({ _id: { $ne: senderId } }).select("_id");
 
@@ -167,6 +400,16 @@ export const endLivestream = async (req, res) => {
       const receiverSocketId = getReceiverSocketId(user._id);
       if (receiverSocketId) {
         io.to(receiverSocketId).emit("livestreamEnded", { streamId });
+
+        logMessage(
+            {
+              type: 'livestream_ended',
+              senderId,
+              receiverId: user._id,
+              streamId,
+            },
+            host
+        );
       }
     });
 
@@ -183,6 +426,7 @@ export const leaveLivestream = async (req, res) => {
   try {
     const userId = req.user._id;
     const { streamId } = req.body;
+    const host = getHost(req);
 
     const users = await User.find({ _id: { $ne: userId } }).select("_id");
 
@@ -190,6 +434,16 @@ export const leaveLivestream = async (req, res) => {
       const receiverSocketId = getReceiverSocketId(user._id);
       if (receiverSocketId) {
         io.to(receiverSocketId).emit("participantLeft", { streamId, userId });
+
+        logMessage(
+            {
+              type: 'livestream_participant_left',
+              senderId: userId,
+              receiverId: user._id,
+              streamId,
+            },
+            host
+        );
       }
     });
 
