@@ -1,3 +1,44 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Gradient Animation cho nền của phần bên phải */
+.auth-pattern-container {
+    position: relative;
+    background: linear-gradient(45deg, #4b6cb7, #182848, #4b6cb7, #182848);
+    background-size: 400% 400%;
+    animation: gradientAnimation 10s ease infinite;
+}
+
+@keyframes gradientAnimation {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Animation cho các ô trong grid pattern */
+.auth-pattern-container .grid > div {
+    animation: pulse 3s ease-in-out infinite;
+    transition: all 0.3s ease;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        background-color: #2d3748; /* Màu tối ban đầu */
+    }
+    50% {
+        transform: scale(1.1);
+        background-color: #4b6cb7; /* Màu sáng hơn giữa chu kỳ */
+    }
+    100% {
+        transform: scale(1);
+        background-color: #2d3748;
+    }
+}
