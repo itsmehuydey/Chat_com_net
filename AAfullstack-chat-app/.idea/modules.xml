@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/AAfullstack-chat-app.iml" filepath="$PROJECT_DIR$/.idea/AAfullstack-chat-app.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/fullstack-chat-app-master.iml" filepath="$PROJECT_DIR$/.idea/fullstack-chat-app-master.iml" />
     </modules>
   </component>
 </project>
