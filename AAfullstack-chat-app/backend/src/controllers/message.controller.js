@@ -1,4 +1,4 @@
-// File: src/controllers/message.controller.js
+
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
 import Group from "../models/group.model.js";
@@ -394,26 +394,21 @@ export const endLivestream = async (req, res) => {
     const { streamId } = req.body;
     const host = getHost(req);
 
-    const users = await User.find({ _id: { $ne: senderId } }).select("_id");
+    if (!streamId) {
+      return res.status(400).json({ error: "Stream ID is required" });
+    }
 
-    const messagePromises = users.map(async (user) => {
-      const receiverSocketId = getReceiverSocketId(user._id);
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("livestreamEnded", { streamId });
+    // Emit sự kiện livestreamEnded đến tất cả client trong phòng livestream
+    io.to(streamId).emit("livestreamEnded", { streamId });
 
-        logMessage(
-            {
-              type: 'livestream_ended',
-              senderId,
-              receiverId: user._id,
-              streamId,
-            },
-            host
-        );
-      }
-    });
-
-    await Promise.all(messagePromises);
+    logMessage(
+        {
+          type: 'livestream_ended',
+          senderId,
+          streamId,
+        },
+        host
+    );
 
     res.status(200).json({ message: "Livestream ended notification sent to all users" });
   } catch (error) {
@@ -428,26 +423,21 @@ export const leaveLivestream = async (req, res) => {
     const { streamId } = req.body;
     const host = getHost(req);
 
-    const users = await User.find({ _id: { $ne: userId } }).select("_id");
+    if (!streamId) {
+      return res.status(400).json({ error: "Stream ID is required" });
+    }
 
-    const messagePromises = users.map(async (user) => {
-      const receiverSocketId = getReceiverSocketId(user._id);
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("participantLeft", { streamId, userId });
+    // Emit sự kiện participantLeft đến tất cả client trong phòng livestream
+    io.to(streamId).emit("participantLeft", { streamId, userId });
 
-        logMessage(
-            {
-              type: 'livestream_participant_left',
-              senderId: userId,
-              receiverId: user._id,
-              streamId,
-            },
-            host
-        );
-      }
-    });
-
-    await Promise.all(messagePromises);
+    logMessage(
+        {
+          type: 'livestream_participant_left',
+          senderId: userId,
+          streamId,
+        },
+        host
+    );
 
     res.status(200).json({ message: "Successfully left livestream" });
   } catch (error) {

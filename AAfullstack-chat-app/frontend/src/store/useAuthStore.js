@@ -18,10 +18,11 @@ export const useAuthStore = create((set, get) => ({
     try {
       const res = await axiosInstance.get("/auth/check");
       set({ authUser: res.data });
-      get().connectSocket();
+      get().connectSocket(res.data?._id || "Host"); // Truyền userId mặc định là "Host" nếu không có authUser
     } catch (error) {
       console.log("Error in checkAuth:", error);
       set({ authUser: null });
+      get().connectSocket("Host"); // Vẫn kết nối socket ngay cả khi checkAuth thất bại
     } finally {
       set({ isCheckingAuth: false });
     }
@@ -33,7 +34,7 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post("/auth/signup", data);
       set({ authUser: res.data });
       toast.success("Account created successfully");
-      get().connectSocket();
+      get().connectSocket(res.data._id);
     } catch (error) {
       toast.error(error.response.data.message);
     } finally {
@@ -47,7 +48,7 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post("/auth/login", data);
       set({ authUser: res.data });
       toast.success("Logged in successfully");
-      get().connectSocket();
+      get().connectSocket(res.data._id);
       navigate(`/chat?userId=${res.data._id}`);
     } catch (error) {
       toast.error(error.response.data.message);
@@ -81,27 +82,39 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  connectSocket: () => {
-    const { authUser } = get();
-    if (!authUser || get().socket?.connected) return;
+  connectSocket: (userId) => {
+    if (get().socket?.connected) return;
 
-    console.log("Connecting socket for user:", authUser._id);
+    console.log("Connecting socket for user:", userId);
     const socket = io(BASE_URL, {
       query: {
-        userId: authUser._id,
+        userId: userId,
       },
       withCredentials: true,
     });
-    socket.connect();
+
+    socket.on("connect", () => {
+      console.log("Socket successfully connected:", socket.id);
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+      setTimeout(() => {
+        socket.connect();
+      }, 3000);
+    });
 
     set({ socket: socket });
-
     socket.on("getOnlineUsers", (userIds) => {
       set({ onlineUsers: userIds });
     });
   },
 
   disconnectSocket: () => {
-    if (get().socket?.connected) get().socket.disconnect();
+    const { socket } = get();
+    if (socket?.connected) {
+      socket.disconnect();
+      set({ socket: null });
+    }
   },
 }));

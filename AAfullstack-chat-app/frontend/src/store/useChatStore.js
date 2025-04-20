@@ -6,14 +6,18 @@
 // export const useChatStore = create((set, get) => ({
 //   messages: [],
 //   users: [],
+//   groups: [],
 //   selectedUser: null,
+//   selectedGroup: null,
 //   isUsersLoading: false,
 //   isMessagesLoading: false,
 //   peers: [],
 //   livestream: null,
 //   peerConnection: null,
 //   participantCount: 0,
-//   currentUserId: null,
+//   currentUserId: useAuthStore.getState().authUser?._id || null,
+//
+//   setCurrentUserId: (userId) => set({ currentUserId: userId }),
 //
 //   getUsers: async () => {
 //     set({ isUsersLoading: true });
@@ -24,6 +28,15 @@
 //       toast.error(error.response?.data?.message || "Failed to fetch users");
 //     } finally {
 //       set({ isUsersLoading: false });
+//     }
+//   },
+//
+//   getGroups: async () => {
+//     try {
+//       const res = await axiosInstance.get("/messages/groups");
+//       set({ groups: res.data });
+//     } catch (error) {
+//       toast.error(error.response?.data?.message || "Failed to fetch groups");
 //     }
 //   },
 //
@@ -48,6 +61,27 @@
 //     }
 //   },
 //
+//   getGroupMessages: async (groupId) => {
+//     set({ isMessagesLoading: true });
+//     try {
+//       const res = await axiosInstance.get(`/messages/group/${groupId}`);
+//       const updatedMessages = res.data.map((message) => {
+//         if (message.file) {
+//           return {
+//             ...message,
+//             file: message.file.replace('/auto/upload/', '/image/upload/'),
+//           };
+//         }
+//         return message;
+//       });
+//       set({ messages: updatedMessages });
+//     } catch (error) {
+//       toast.error(error.response?.data?.message || "Failed to fetch group messages");
+//     } finally {
+//       set({ isMessagesLoading: false });
+//     }
+//   },
+//
 //   sendMessage: async (formData) => {
 //     const { selectedUser, messages } = get();
 //     try {
@@ -66,15 +100,67 @@
 //     }
 //   },
 //
+//   sendGroupMessage: async (formData) => {
+//     const { selectedGroup, messages } = get();
+//     try {
+//       const res = await axiosInstance.post(`/messages/group/send/${selectedGroup._id}`, formData, {
+//         headers: {
+//           "Content-Type": "multipart/form-data",
+//         },
+//       });
+//       const updatedMessage = {
+//         ...res.data,
+//         file: res.data.file ? res.data.file.replace('/auto/upload/', '/image/upload/') : null,
+//       };
+//       set({ messages: [...messages, updatedMessage] });
+//     } catch (error) {
+//       throw new Error(error.response?.data?.message || "Failed to send group message");
+//     }
+//   },
+//
+//   createGroup: async (groupData) => {
+//     try {
+//       const res = await axiosInstance.post("/messages/create-group", groupData);
+//       set((state) => ({
+//         groups: [...state.groups, res.data],
+//       }));
+//     } catch (error) {
+//       throw new Error(error.response?.data?.message || "Failed to create group");
+//     }
+//   },
+//
 //   subscribeToMessages: () => {
-//     const { selectedUser } = get();
-//     if (!selectedUser) return;
+//     const socket = useAuthStore.getState().socket;
+//     const authUser = useAuthStore.getState().authUser;
+//
+//     socket.on("newMessage", (newMessage) => {
+//       const { messages } = get();
+//       const isMessageForCurrentChat =
+//           (newMessage.senderId === authUser._id && newMessage.receiverId === get().selectedUser?._id) ||
+//           (newMessage.senderId === get().selectedUser?._id && newMessage.receiverId === authUser._id);
+//
+//       if (!isMessageForCurrentChat) return;
+//
+//       const updatedMessage = {
+//         ...newMessage,
+//         file: newMessage.file ? newMessage.file.replace('/auto/upload/', '/image/upload/') : null,
+//       };
+//
+//       set({
+//         messages: [...messages, updatedMessage],
+//       });
+//     });
+//   },
+//
+//   subscribeToGroupMessages: () => {
+//     const { selectedGroup } = get();
+//     if (!selectedGroup) return;
 //
 //     const socket = useAuthStore.getState().socket;
 //
-//     socket.on("newMessage", (newMessage) => {
-//       const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
-//       if (!isMessageSentFromSelectedUser) return;
+//     socket.on("newGroupMessage", (newMessage) => {
+//       const isMessageFromSelectedGroup = newMessage.groupId === selectedGroup._id;
+//       if (!isMessageFromSelectedGroup) return;
 //
 //       const updatedMessage = {
 //         ...newMessage,
@@ -85,6 +171,12 @@
 //         messages: [...get().messages, updatedMessage],
 //       });
 //     });
+//
+//     socket.on("groupCreated", (newGroup) => {
+//       set((state) => ({
+//         groups: [...state.groups, newGroup],
+//       }));
+//     });
 //   },
 //
 //   unsubscribeFromMessages: () => {
@@ -92,7 +184,15 @@
 //     socket.off("newMessage");
 //   },
 //
-//   setSelectedUser: (selectedUser) => set({ selectedUser }),
+//   unsubscribeFromGroupMessages: () => {
+//     const socket = useAuthStore.getState().socket;
+//     socket.off("newGroupMessage");
+//     socket.off("groupCreated");
+//   },
+//
+//   setSelectedUser: (selectedUser) => set({ selectedUser, selectedGroup: null }),
+//
+//   setSelectedGroup: (selectedGroup) => set({ selectedGroup, selectedUser: null }),
 //
 //   getPeersFromTracker: async (torrentFilePath) => {
 //     try {
@@ -108,7 +208,7 @@
 //   subscribeToLivestream: () => {
 //     const socket = useAuthStore.getState().socket;
 //     socket.on("livestreamNotification", (notification) => {
-//       toast.success(notification.message, {
+//       toast.success("Livestream started! Join here: " + notification.streamLink, {
 //         duration: 5000,
 //       });
 //       set({ livestream: notification, currentUserId: notification.userId });
@@ -170,6 +270,10 @@
 //   startLivestream: async (streamId) => {
 //     const socket = useAuthStore.getState().socket;
 //
+//     // Đảm bảo broadcaster tham gia phòng streamId
+//     socket.emit("join-livestream", streamId);
+//     console.log(`Broadcaster joined livestream room ${streamId}`);
+//
 //     const peerConnection = new RTCPeerConnection({
 //       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 //     });
@@ -205,8 +309,6 @@
 //     await axiosInstance.post("/messages/broadcast-livestream", { streamId });
 //   },
 // }));
-
-// File: src/store/useChatStore.js
 import { create } from "zustand";
 import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
@@ -224,7 +326,9 @@ export const useChatStore = create((set, get) => ({
   livestream: null,
   peerConnection: null,
   participantCount: 0,
-  currentUserId: null,
+  currentUserId: useAuthStore.getState().authUser?._id || null,
+
+  setCurrentUserId: (userId) => set({ currentUserId: userId }),
 
   getUsers: async () => {
     set({ isUsersLoading: true });
@@ -444,7 +548,21 @@ export const useChatStore = create((set, get) => ({
   joinLivestream: async (streamId) => {
     const socket = useAuthStore.getState().socket;
 
+    // Đợi socket kết nối
+    if (!socket.connected) {
+      await new Promise((resolve) => {
+        socket.on("connect", () => resolve());
+        socket.connect();
+      });
+    }
+
     socket.emit("join-livestream", streamId);
+
+    // Đóng peerConnection cũ nếu tồn tại
+    const oldPeerConnection = get().peerConnection;
+    if (oldPeerConnection) {
+      oldPeerConnection.close();
+    }
 
     const peerConnection = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -461,14 +579,22 @@ export const useChatStore = create((set, get) => ({
     };
 
     socket.on("receive-stream", async ({ offer, streamerId }) => {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      socket.emit("answer-stream", { streamId, answer, streamerId });
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit("answer-stream", { streamId, answer, streamerId });
+      } catch (error) {
+        console.error("Error handling receive-stream:", error);
+      }
     });
 
-    socket.on("ice-candidate", ({ candidate }) => {
-      peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    socket.on("ice-candidate", async ({ candidate }) => {
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.error("Error adding ICE candidate:", error);
+      }
     });
 
     set({ peerConnection });
@@ -476,6 +602,23 @@ export const useChatStore = create((set, get) => ({
 
   startLivestream: async (streamId) => {
     const socket = useAuthStore.getState().socket;
+
+    // Đợi socket kết nối
+    if (!socket.connected) {
+      await new Promise((resolve) => {
+        socket.on("connect", () => resolve());
+        socket.connect();
+      });
+    }
+
+    socket.emit("join-livestream", streamId);
+    console.log(`Broadcaster joined livestream room ${streamId}`);
+
+    // Đóng peerConnection cũ nếu tồn tại
+    const oldPeerConnection = get().peerConnection;
+    if (oldPeerConnection) {
+      oldPeerConnection.close();
+    }
 
     const peerConnection = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -500,11 +643,19 @@ export const useChatStore = create((set, get) => ({
     socket.emit("start-livestream", { streamId, offer });
 
     socket.on("receive-answer", async ({ answer }) => {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      } catch (error) {
+        console.error("Error setting remote description:", error);
+      }
     });
 
-    socket.on("ice-candidate", ({ candidate }) => {
-      peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    socket.on("ice-candidate", async ({ candidate }) => {
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.error("Error adding ICE candidate:", error);
+      }
     });
 
     set({ peerConnection, livestream: { streamId, streamerId: socket.id } });

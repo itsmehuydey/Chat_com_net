@@ -10,6 +10,20 @@
     animation: gradientAnimation 10s ease infinite;
 }
 
+/* File: src/index.css */
+.animate-spin-slow {
+    animation: spin 3s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
 @keyframes gradientAnimation {
     0% {
         background-position: 0% 50%;
