@@ -21,6 +21,7 @@ const LiveStream = () => {
     const queryParams = new URLSearchParams(location.search);
     const userIdFromQuery = queryParams.get("userId");
     const isBroadcaster = !userIdFromQuery;
+
     const stopTracks = (stream) => {
         return new Promise((resolve) => {
             if (stream) {
@@ -167,13 +168,13 @@ const LiveStream = () => {
         }
     };
 
-    const handleJoinStream = () => {
+    const handleJoinStream = async () => {
         if (isBroadcaster || hasJoined.current || !socket.connected) return;
 
         setIsJoined(true);
         hasJoined.current = true;
 
-        joinLivestream(streamId);
+        await joinLivestream(streamId);
 
         const peerConnection = useChatStore.getState().peerConnection;
         if (peerConnection) {
