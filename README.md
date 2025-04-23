@@ -12,6 +12,7 @@
 👀 Online user tracking & presence updates  
 🎨 Beautiful & responsive UI using **TailwindCSS** + **DaisyUI**  
 📦 Cloud image/file uploads via **Cloudinary API**  
+🤖 Chatting with AI bot via **Google Gemini API**  
 📺 **Livestreaming support** — when a peer becomes a streamer, data is transmitted partially via **P2P connections (WebRTC)**  
 🔄 Global state management with **Zustand**  
 🧯 Full error handling on both client and server  
