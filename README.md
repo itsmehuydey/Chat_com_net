@@ -11,8 +11,8 @@
 🔐 **JWT Authentication & Authorization** for secure access  
 👀 Online user tracking & presence updates  
 🎨 Beautiful & responsive UI using **TailwindCSS** + **DaisyUI**  
-📦 Cloud image uploads via **Cloudinary API**  
-📺 **Livestreaming support** — when a peer becomes a streamer, data is transmitted partially (20%) via **P2P connections (WebRTC)**  
+📦 Cloud image/file uploads via **Cloudinary API**  
+📺 **Livestreaming support** — when a peer becomes a streamer, data is transmitted partially via **P2P connections (WebRTC)**  
 🔄 Global state management with **Zustand**  
 🧯 Full error handling on both client and server  
 🚀 Ready for **FREE deployment** with platforms like Render, Vercel, or Railway
@@ -20,6 +20,14 @@
 ---
 
 ## 🗂️ Folder Structure
+AAfullstack-chat-app/
+
+├── backend/
+
+│   └── .env
+
+└── frontend/
+
 
 
 ---
@@ -29,13 +37,31 @@
 Create a `.env` file inside the `server/` folder and fill it with:
 
 ```env
-MONGODB_URI=your_mongodb_connection_string
+MONGODB_URI=
 PORT=5001
-JWT_SECRET=your_jwt_secret
-
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
-
+VITE_SERVER_HOST=
+VITE_CLIENT_HOST=
+JWT_SECRET=
+GOOGLE_GEN_AI_KEY=
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
 NODE_ENV=development
+VITE_SERVER_PORT=5001
+VITE_CLIENT_PORT=5173
+```
+## 🟢 Execute client frontend 
+```Execute client
+npm install or npm install --legacy-peer-deep
+npm run or npm run dev
+```
+
+## 🟢 Execute server backend
+```Execute server
+npm install or npm install --legacy-peer-deep
+npm start or npm start dev
+```
+
+## 📌 Reference
+MERN Stack Project: Realtime Chat App Tutorial - React.js & Socket.io via link: https://youtu.be/ntKkVrQqBYY?si=oKPrsLAlNoTes0-c
 
